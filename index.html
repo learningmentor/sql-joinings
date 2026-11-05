@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SQL Joins Interactive Studio & Sandbox</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome for clean developer icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- sql.js (WebAssembly SQLite engine in-browser) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            dark: {
+              900: '#0b0f19',
+              850: '#111827',
+              800: '#1e293b',
+              700: '#334155',
+            }
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    /* Custom styling for code textarea and tables */
+    .editor-line-numbers {
+      counter-reset: line;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    .glow-cyan {
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.25);
+    }
+    .glow-indigo {
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.25);
+    }
+  </style>
+</head>
+<body class="bg-dark-900 text-slate-100 font-sans min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-dark-700 bg-dark-850 sticky top-0 z-50 px-4 py-2.5 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg">
+        <i class="fa-solid fa-diagram-project text-white text-base"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-base md:text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
+          SQL Join Studio
+        </h1>
+        <p class="text-[11px] text-slate-400 font-medium">In-Browser Real SQLite Engine • 500+ Records per Table</p>
+      </div>
+    </div>
+
+    <!-- Active Navigation Tabs -->
+    <div class="flex items-center bg-dark-900/80 p-1 rounded-xl border border-dark-700 text-xs font-semibold space-x-1">
+      <button onclick="switchTab('playground')" id="tabBtn-playground" class="tab-btn px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white flex items-center gap-1.5 transition">
+        <i class="fa-solid fa-code"></i><span>Playground</span>
+      </button>
+      <button onclick="switchTab('missions')" id="tabBtn-missions" class="tab-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white flex items-center gap-1.5 transition">
+        <i class="fa-solid fa-flag-checkered"></i><span>Guided Missions</span>
+        <span id="missionBadge" class="bg-indigo-500/30 text-indigo-300 text-[10px] px-1.5 py-0.2 rounded-full border border-indigo-500/40">0/5</span>
+      </button>
+      <button onclick="switchTab('schema')" id="tabBtn-schema" class="tab-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white flex items-center gap-1.5 transition">
+        <i class="fa-solid fa-database"></i><span>Data & Schema (500+)</span>
+      </button>
+      <button onclick="switchTab('visualizer')" id="tabBtn-visualizer" class="tab-btn px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white flex items-center gap-1.5 transition">
+        <i class="fa-solid fa-cubes"></i><span>Visual Join Matrix</span>
+      </button>
+    </div>
+
+    <!-- System Status & Data Reset -->
+    <div class="flex items-center space-x-2 text-xs">
+      <div id="engineStatus" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="font-mono text-[11px]" id="engineStatusText">Initializing Engine...</span>
+      </div>
+      <button onclick="seedDatabase(true)" title="Regenerate all 500+ datasets" class="px-2.5 py-1 bg-dark-800 hover:bg-dark-700 text-slate-300 rounded-lg border border-dark-700 text-xs flex items-center gap-1 transition">
+        <i class="fa-solid fa-arrows-rotate"></i> Reset
+      </button>
+    </div>
+  </header>
+
+  <!-- Notification Toast Area -->
+  <div id="toast" class="fixed bottom-4 right-4 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-dark-800 border border-dark-700 text-slate-100 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+    <i id="toastIcon" class="fa-solid fa-info-circle text-indigo-400"></i>
+    <div id="toastMessage" class="text-xs font-medium">Notification message</div>
+  </div>
+
+  <!-- MAIN VIEWPORT -->
+  <main class="flex-1 flex flex-col p-3 md:p-5 max-w-[1720px] w-full mx-auto space-y-4">
+
+    <!-- ============================================== -->
+    <!-- TAB 1: PLAYGROUND (Visuals + SQL Editor + Table) -->
+    <!-- ============================================== -->
+    <section id="view-playground" class="tab-view flex-1 flex flex-col space-y-4">
+      
+      <!-- Top Interactive Bar: Quick Join Presets & Venn Diagram -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Join Selector Presets -->
+        <div class="lg:col-span-8 bg-dark-850 border border-dark-700 rounded-2xl p-4 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs uppercase tracking-wider font-bold text-slate-400 flex items-center gap-2">
+                <i class="fa-solid fa-bolt text-amber-400"></i> Quick Join Presets
+              </span>
+              <span class="text-xs text-slate-400">Loads real data queries with explanations</span>
+            </div>
+            
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+              <button onclick="loadPreset('inner')" class="preset-btn text-left p-2.5 rounded-xl border border-dark-700 bg-dark-900 hover:border-indigo-500/60 hover:bg-indigo-950/20 transition group">
+                <div class="text-[11px] font-bold text-indigo-400 group-hover:text-indigo-300">INNER JOIN</div>
+                <div class="text-[10px] text-slate-400 truncate">Exact Matches Only</div>
+              </button>
+              <button onclick="loadPreset('left')" class="preset-btn text-left p-2.5 rounded-xl border border-dark-700 bg-dark-900 hover:border-indigo-500/60 hover:bg-indigo-950/20 transition group">
+                <div class="text-[11px] font-bold text-sky-400 group-hover:text-sky-300">LEFT JOIN</div>
+                <div class="text-[10px] text-slate-400 truncate">All Left + Matched Right</div>
+              </button>
+              <button onclick="loadPreset('left_null')" class="preset-btn text-left p-2.5 rounded-xl border border-dark-700 bg-dark-900 hover:border-indigo-500/60 hover:bg-indigo-950/20 transition group">
+                <div class="text-[11px] font-bold text-amber-400 group-hover:text-amber-300">LEFT (IS NULL)</div>
+                <div class="text-[10px] text-slate-400 truncate">Orphans / Zero Orders</div>
+              </button>
+              <button onclick="loadPreset('cross')" class="preset-btn text-left p-2.5 rounded-xl border border-dark-700 bg-dark-900 hover:border-indigo-500/60 hover:bg-indigo-950/20 transition group">
+                <div class="text-[11px] font-bold text-pink-400 group-hover:text-pink-300">CROSS JOIN</div>
+                <div class="text-[10px] text-slate-400 truncate">Cartesian Product A × B</div>
+              </button>
+              <button onclick="loadPreset('self')" class="preset-btn text-left p-2.5 rounded-xl border border-dark-700 bg-dark-900 hover:border-indigo-500/60 hover:bg-indigo-950/20 transition group">
+                <div class="text-[11px] font-bold text-emerald-400 group-hover:text-emerald-300">SELF JOIN</div>
+                <div class="text-[10px] text-slate-400 truncate">Manager & Staff Hierarchy</div>
+              </button>
+              <button onclick="loadPreset('multi')" class="preset-btn text-left p-2.5 rounded-xl border border-dark-700 bg-dark-900 hover:border-indigo-500/60 hover:bg-indigo-950/20 transition group">
+                <div class="text-[11px] font-bold text-purple-400 group-hover:text-purple-300">MULTI-TABLE (4)</div>
+                <div class="text-[10px] text-slate-400 truncate">Customer-Order-Product</div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Interactive dynamic explanation card -->
+          <div id="joinConceptCard" class="mt-3 p-3 bg-dark-900/90 rounded-xl border border-dark-700 text-xs flex items-center justify-between gap-3">
+            <div class="flex items-start gap-2.5">
+              <span id="conceptIcon" class="w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 mt-0.5 text-xs">
+                <i class="fa-solid fa-lightbulb"></i>
+              </span>
+              <div>
+                <span id="conceptTitle" class="font-semibold text-slate-200">INNER JOIN (Default Concept)</span>
+                <p id="conceptDesc" class="text-slate-400 text-[11px] mt-0.5">
+                  Returns rows when there is a match in both tables. If a Customer has not placed an order, they will be excluded completely.
+                </p>
+              </div>
+            </div>
+            <div id="conceptFormula" class="hidden sm:block font-mono text-[11px] px-2.5 py-1 bg-dark-800 border border-dark-700 rounded-lg text-indigo-300 shrink-0">
+              A ∩ B (Intersection)
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic SVG Venn Diagram with Real-time Highlights -->
+        <div class="lg:col-span-4 bg-dark-850 border border-dark-700 rounded-2xl p-4 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs uppercase tracking-wider font-bold text-slate-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-circle-nodes text-indigo-400"></i> Venn Diagram Representation
+            </span>
+            <span id="vennLabel" class="text-xs font-mono font-bold text-indigo-400">INNER JOIN</span>
+          </div>
+
+          <!-- Responsive SVG Graphic -->
+          <div class="relative flex items-center justify-center h-32 w-full my-auto">
+            <svg viewBox="0 0 320 160" class="w-full h-full max-w-[280px]">
+              <defs>
+                <filter id="glowEffect" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+                <clipPath id="leftCircleClip">
+                  <circle cx="115" cy="80" r="62" />
+                </clipPath>
+              </defs>
+
+              <!-- Left Circle (Table A) -->
+              <circle id="vennLeft" cx="115" cy="80" r="62" fill="#1e293b" stroke="#6366f1" stroke-width="2.5" class="transition-all duration-300" opacity="0.8"/>
+              
+              <!-- Right Circle (Table B) -->
+              <circle id="vennRight" cx="205" cy="80" r="62" fill="#1e293b" stroke="#38bdf8" stroke-width="2.5" class="transition-all duration-300" opacity="0.8"/>
+              
+              <!-- Intersection Clip for A ∩ B -->
+              <circle id="vennCenter" cx="205" cy="80" r="62" clip-path="url(#leftCircleClip)" fill="#6366f1" opacity="0.75" class="transition-all duration-300" />
+
+              <!-- Labels -->
+              <text x="80" y="85" fill="#e2e8f0" font-size="12" font-weight="700" text-anchor="middle" pointer-events="none">Table A</text>
+              <text x="240" y="85" fill="#e2e8f0" font-size="12" font-weight="700" text-anchor="middle" pointer-events="none">Table B</text>
+              <text id="vennIntersectionText" x="160" y="85" fill="#ffffff" font-size="11" font-weight="800" text-anchor="middle" pointer-events="none">MATCH</text>
+            </svg>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] text-slate-400 border-t border-dark-700/60 pt-2 font-mono">
+            <span>A: customers (500)</span>
+            <span>B: orders (550)</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Main SQL Editor & Controls -->
+      <div class="bg-dark-850 border border-dark-700 rounded-2xl p-4 flex flex-col space-y-3 shadow-lg">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-dark-700/80 pb-3">
+          <div class="flex items-center space-x-2">
+            <span class="w-3 h-3 rounded-full bg-red-500/80"></span>
+            <span class="w-3 h-3 rounded-full bg-yellow-500/80"></span>
+            <span class="w-3 h-3 rounded-full bg-green-500/80"></span>
+            <span class="text-xs font-mono text-slate-400 pl-2">query_editor.sql</span>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <button onclick="formatSQL()" class="px-3 py-1.5 bg-dark-800 hover:bg-dark-700 text-slate-300 rounded-lg text-xs font-medium border border-dark-700 transition flex items-center gap-1.5">
+              <i class="fa-solid fa-align-left text-indigo-400"></i> Format
+            </button>
+            <button onclick="copyQuery()" class="px-3 py-1.5 bg-dark-800 hover:bg-dark-700 text-slate-300 rounded-lg text-xs font-medium border border-dark-700 transition flex items-center gap-1.5">
+              <i class="fa-regular fa-copy"></i> Copy
+            </button>
+            <button onclick="executePlaygroundQuery()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-indigo-600/30 transition flex items-center gap-2">
+              <i class="fa-solid fa-play text-[11px]"></i> Run Query (Ctrl+Enter)
+            </button>
+          </div>
+        </div>
+
+        <!-- SQL Editor Input Area -->
+        <div class="relative bg-dark-900 rounded-xl border border-dark-700 overflow-hidden focus-within:border-indigo-500 transition">
+          <textarea id="sqlInput" rows="6" spellcheck="false" 
+            class="w-full bg-transparent text-slate-100 font-mono text-xs md:text-sm p-3.5 focus:outline-none resize-y custom-scroll"
+            placeholder="Type your SQL query here... e.g. SELECT * FROM customers INNER JOIN orders ON customers.customer_id = orders.customer_id LIMIT 10;">SELECT 
+    c.customer_id, 
+    c.full_name, 
+    c.city, 
+    o.order_id, 
+    o.order_date, 
+    o.total_amount
+FROM customers c
+INNER JOIN orders o ON c.customer_id = o.customer_id
+ORDER BY o.order_id DESC
+LIMIT 15;</textarea>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 px-1">
+          <div class="flex items-center gap-3">
+            <span><strong class="text-slate-300">Shortcut:</strong> Press <code class="bg-dark-800 px-1.5 py-0.5 rounded text-indigo-300 font-mono">Ctrl + Enter</code> to run</span>
+            <span class="hidden md:inline">• SQLite 3.x WASM Engine</span>
+          </div>
+          <div id="queryStats" class="font-mono text-emerald-400 font-medium text-[11px]">
+            Ready to execute.
+          </div>
+        </div>
+      </div>
+
+      <!-- Execution Results Inspector Table -->
+      <div class="bg-dark-850 border border-dark-700 rounded-2xl p-4 flex flex-col flex-1 shadow-lg">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div class="flex items-center space-x-2">
+            <span class="text-xs uppercase tracking-wider font-bold text-slate-300 flex items-center gap-2">
+              <i class="fa-solid fa-table text-indigo-400"></i> Result Inspector
+            </span>
+            <span id="resultsCountBadge" class="bg-dark-800 text-indigo-300 border border-dark-700 text-xs px-2.5 py-0.5 rounded-full font-mono">
+              0 Rows
+            </span>
+          </div>
+
+          <!-- Pagination and Filter Controls -->
+          <div class="flex items-center space-x-2 text-xs">
+            <label class="text-slate-400">Page Size:</label>
+            <select id="pageSizeSelect" onchange="changePageSize()" class="bg-dark-900 border border-dark-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none">
+              <option value="15">15</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="500">500 (All)</option>
+            </select>
+            <div class="flex items-center space-x-1 pl-2">
+              <button onclick="prevPage()" id="prevPageBtn" class="px-2 py-1 rounded bg-dark-800 border border-dark-700 hover:bg-dark-700 disabled:opacity-30 disabled:pointer-events-none">
+                <i class="fa-solid fa-chevron-left text-[10px]"></i>
+              </button>
+              <span id="pageInfo" class="font-mono px-2 text-slate-400">1 / 1</span>
+              <button onclick="nextPage()" id="nextPageBtn" class="px-2 py-1 rounded bg-dark-800 border border-dark-700 hover:bg-dark-700 disabled:opacity-30 disabled:pointer-events-none">
+                <i class="fa-solid fa-chevron-right text-[10px]"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rendered Table Wrapper -->
+        <div class="overflow-x-auto rounded-xl border border-dark-700 flex-1 max-h-[420px] custom-scroll bg-dark-900/60">
+          <table id="resultsTable" class="w-full text-left text-xs font-mono border-collapse">
+            <thead id="resultsHead" class="bg-dark-800 sticky top-0 z-10 text-slate-300 uppercase tracking-wider text-[11px] border-b border-dark-700">
+              <tr><th class="p-3">Run query to display result set...</th></tr>
+            </thead>
+            <tbody id="resultsBody" class="divide-y divide-dark-750 text-slate-300">
+              <tr><td class="p-4 text-center text-slate-500 italic">No query executed yet. Press 'Run Query' above.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- ============================================== -->
+    <!-- TAB 2: GUIDED MISSIONS (Hands-on Challenges)  -->
+    <!-- ============================================== -->
+    <section id="view-missions" class="tab-view hidden flex-1 flex flex-col space-y-4">
+      <div class="bg-dark-850 border border-dark-700 rounded-2xl p-5">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-graduation-cap text-indigo-400"></i> Interactive Join Missions (Real Work Simulator)
+            </h2>
+            <p class="text-xs text-slate-400 mt-1">
+              Solve real business problems using joins across our 500+ record tables. Your code will be validated against ground truth data!
+            </p>
+          </div>
+          <div class="flex items-center space-x-3">
+            <div class="text-right">
+              <span class="text-xs text-slate-400">Progress</span>
+              <div id="missionProgressText" class="text-sm font-bold text-indigo-400 font-mono">0 / 5 Completed</div>
+            </div>
+            <div class="w-24 bg-dark-800 h-2.5 rounded-full overflow-hidden border border-dark-700">
+              <div id="missionProgressBar" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full w-0 transition-all duration-500"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mission Picker Pills -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 mt-4" id="missionPillsContainer">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Current Active Mission Playground -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1">
+        <!-- Mission Objective & Details -->
+        <div class="lg:col-span-5 bg-dark-850 border border-dark-700 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span id="missionLevelTag" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                Mission 1 • Inner Join
+              </span>
+              <span id="missionStatusTag" class="text-xs text-amber-400 flex items-center gap-1">
+                <i class="fa-regular fa-circle-dot"></i> In Progress
+              </span>
+            </div>
+
+            <h3 id="missionTitle" class="text-base font-bold text-white mt-3">
+              Title of the Mission
+            </h3>
+            <p id="missionObjective" class="text-xs text-slate-300 mt-2 leading-relaxed">
+              Objective text goes here...
+            </p>
+
+            <!-- Clue/Hint Accordion -->
+            <div class="mt-4 p-3.5 bg-dark-900 rounded-xl border border-dark-700/80">
+              <div class="flex items-center justify-between cursor-pointer" onclick="toggleHint()">
+                <span class="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+                  <i class="fa-solid fa-lightbulb"></i> Need a Hint?
+                </span>
+                <i id="hintChevron" class="fa-solid fa-chevron-down text-slate-400 text-xs"></i>
+              </div>
+              <p id="missionHint" class="text-[11px] text-slate-400 mt-2 hidden leading-normal">
+                Hint explanation appears here.
+              </p>
+            </div>
+
+            <!-- Expected schema hint -->
+            <div class="mt-4">
+              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Tables Involved:</span>
+              <div id="missionTablesTag" class="flex flex-wrap gap-1.5 mt-1.5">
+                <!-- dynamic tags -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom check button -->
+          <div class="pt-4 border-t border-dark-700 mt-4 flex items-center justify-between">
+            <button onclick="revealSolution()" class="text-xs text-slate-400 hover:text-slate-200 underline">
+              Peek at Solution
+            </button>
+            <button onclick="verifyMissionSolution()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 transition flex items-center gap-2">
+              <i class="fa-solid fa-circle-check"></i> Verify Answer
+            </button>
+          </div>
+        </div>
+
+        <!-- Mission Code Editor and Live Response Feedback -->
+        <div class="lg:col-span-7 bg-dark-850 border border-dark-700 rounded-2xl p-4 flex flex-col space-y-3">
+          <div class="flex items-center justify-between border-b border-dark-700 pb-2">
+            <span class="text-xs font-mono text-slate-300">
+              <i class="fa-solid fa-terminal text-indigo-400 mr-1.5"></i> Mission SQL Query
+            </span>
+            <button onclick="resetMissionEditor()" class="text-[11px] text-slate-400 hover:text-white">
+              Reset Query
+            </button>
+          </div>
+
+          <textarea id="missionSqlInput" rows="7" spellcheck="false" 
+            class="w-full bg-dark-900 text-slate-100 font-mono text-xs md:text-sm p-3.5 rounded-xl border border-dark-700 focus:outline-none focus:border-indigo-500 resize-y custom-scroll"></textarea>
+
+          <div id="missionFeedbackBox" class="p-3.5 rounded-xl border border-dark-700 bg-dark-900 text-xs flex items-start gap-3">
+            <i id="missionFeedbackIcon" class="fa-solid fa-circle-info text-indigo-400 mt-0.5"></i>
+            <div>
+              <div id="missionFeedbackTitle" class="font-bold text-slate-200">Awaiting execution</div>
+              <div id="missionFeedbackDetail" class="text-slate-400 text-[11px] mt-0.5">Write your query above and click "Verify Answer" to test your joins.</div>
+            </div>
+          </div>
+
+          <!-- Mission Result Preview mini-table -->
+          <div class="border border-dark-700 rounded-xl overflow-hidden max-h-48 overflow-y-auto custom-scroll bg-dark-900/60">
+            <table class="w-full text-left font-mono text-[11px]" id="missionResultsTable">
+              <thead class="bg-dark-800 text-slate-400 border-b border-dark-700">
+                <tr><th class="p-2">Columns...</th></tr>
+              </thead>
+              <tbody class="divide-y divide-dark-750 text-slate-300">
+                <tr><td class="p-2 text-slate-500 italic">Run verification to preview output rows</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================== -->
+    <!-- TAB 3: SCHEMA VIEWER & 500+ DATA INSPECTOR      -->
+    <!-- ============================================== -->
+    <section id="view-schema" class="tab-view hidden flex-1 flex flex-col space-y-4">
+      <div class="bg-dark-850 border border-dark-700 rounded-2xl p-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-sitemap text-indigo-400"></i> Relational E-Commerce Database Schema
+            </h2>
+            <p class="text-xs text-slate-400">5 interconnected relational tables containing over 2,500 total generated records for heavy join testing.</p>
+          </div>
+
+          <!-- Select Table to inspect rows -->
+          <div class="flex items-center space-x-2">
+            <span class="text-xs text-slate-400">View Table Data:</span>
+            <select id="schemaTableSelect" onchange="inspectTableData()" class="bg-dark-900 border border-dark-700 rounded-xl px-3 py-1.5 text-xs text-indigo-300 font-mono font-medium focus:outline-none">
+              <option value="customers">customers (~500 rows)</option>
+              <option value="orders">orders (~550 rows)</option>
+              <option value="order_items">order_items (~1000 rows)</option>
+              <option value="products">products (~500 rows)</option>
+              <option value="categories">categories (12 rows)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Relational Card Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+        <!-- Customers Schema Card -->
+        <div class="bg-dark-850 border border-dark-700 rounded-xl p-3.5 hover:border-indigo-500/50 transition">
+          <div class="flex items-center justify-between border-b border-dark-700 pb-2">
+            <span class="font-bold text-xs text-white flex items-center gap-1.5"><i class="fa-solid fa-users text-indigo-400"></i> customers</span>
+            <span class="text-[10px] bg-dark-900 px-1.5 py-0.5 rounded text-emerald-400 font-mono font-semibold" id="count-customers">500 rows</span>
+          </div>
+          <div class="mt-2.5 space-y-1 text-[11px] font-mono text-slate-300">
+            <div class="flex justify-between items-center text-amber-300"><span class="font-bold">PK customer_id</span><span class="text-[10px] text-slate-500">INT</span></div>
+            <div class="flex justify-between"><span>full_name</span><span class="text-[10px] text-slate-500">TEXT</span></div>
+            <div class="flex justify-between"><span>email</span><span class="text-[10px] text-slate-500">TEXT</span></div>
+            <div class="flex justify-between"><span>city</span><span class="text-[10px] text-slate-500">TEXT</span></div>
+            <div class="flex justify-between"><span>country</span><span class="text-[10px] text-slate-500">TEXT</span></div>
+            <div class="flex justify-between text-indigo-300"><span>FK manager_id</span><span class="text-[10px] text-slate-500">INT (Self)</span></div>
+          </div>
+        </div>
+
+        <!-- Orders Schema Card -->
+        <div class="bg-dark-850 border border-dark-700 rounded-xl p-3.5 hover:border-indigo-500/50 transition">
+          <div class="flex items-center justify-between border-b border-dark-700 pb-2">
+            <span class="font-bold text-xs text-white flex items-center gap-1.5"><i class="fa-solid fa-receipt text-sky-400"></i> orders</span>
+            <span class="text-[10px] bg-dark-900 px-1.5 py-0.5 rounded text-emerald-400 font-mono font-semibold" id="count-orders">550 rows</span>
+          </div>
+          <div class="mt-2.5 space-y-1 text-[11px] font-mono text-slate-300">
+            <div class="flex justify-between items-center text-amber-300"><span class="font-bold">PK order_id</span><span class="text-[10px] text-slate-500">INT</span></div>
+            <div class="flex justify-between text-indigo-300"><span>FK customer_id</span><span class="text-[10px] text-slate-500">INT</span></div>
+            <div class="flex justify-between"><span>order_date</span><span class="text-[10px] text-slate-500">DATE</span></div>
+            <div class="flex justify-between"><span>order_status</span><span class="text-[10px] text-slate-500">TEXT</span></div>
+            <div class="flex justify-between"><span>total_amount</span><span class="text-[10px] text-slate-500">DECIMAL</span></div>
+          </div>
+        </div>
+
+        <!-- Order Items Schema Card -->
+        <div class="bg-dark-850 border border-dark-700 rounded-xl p-3.5 hover:border-indigo-500/50 transition">
+          <div class="flex items-center justify-between border-b border-dark-700 pb-2">
+            <span class="font-bold text-xs text-white flex items-center gap-1.5"><i class="fa-solid fa-boxes-stacked text-purple-400"></i> order_items</span>
+            <span class="text-[10px] bg-dark-900 px-1.5 py-0.5 rounded text-emerald-400 font-mono font-semibold" id="count-order_items">1000 rows</span>
+          </div>
+          <div class="mt-2.5 space-y-1 text-[11px] font-mono text-slate-300">
+            <div class="flex justify-between items-center text-amber-300"><span class="font-bold">PK item_id</span><span class="text-[10px] text-slate-500">INT</span></div>
+            <div class="flex justify-between text-indigo-300"><span>FK order_id</span><span class="text-[10px] text-slate-500">INT</span></div>
+            <div class="flex justify-between text-indigo-300"><span>FK product_id</span><span class="text-[10px] text-slate-500">INT</span></div>
+            <div class="flex justify-between"><span>quantity</span><span class="text-[10px] text-slate-500">INT</span></div>
+            <div class="flex justify-between"><span>unit_price</span><span class="text-[10px] text-slate-500">DECIMAL</span></div>
+          </div>
+        </div>
+
+        <!-- Products Schema Card -->
+        <div class="bg-dark-850 border border-dark-700 rounded-xl p-3.5 hover:border-indigo-500/50 transition">
+          <div class="flex items-center justify-between border-b border-dark-700 pb-2">
+            <span class="font-bold text-xs text-white flex items-center gap-1.5"><i class="fa-solid fa-tag text-pink-400"></i> products</span>
+            <span class="text-[10px] bg-dark-900 px-1.5 py-0.5 rounded text-emerald-400 font-mono font-semibold" id="count-products">500 rows</span>
+          </div>
+          <div class="mt-2.5 space-y-1 text-[11px] font-mono text-slate-300">
+            <div class="flex justify-between items-center text-amber-300"><span class="font-bold">PK product_id</span><span class="text-[10px] text-slate-500">INT</span></div>
+            <div class="flex justify-between"><span>product_name</span><span class="text-[10px] text-slate-500">TEXT</span></div>
+            <div class="flex justify-between text-indigo-300"><span>FK category_id</span><span class="text-[10px] text-slate-500">INT</span></div>
+            <div class="flex justify-between"><span>price</span><span class="text-[10px] text-slate-500">DECIMAL</span></div>
+            <div class="flex justify-between"><span>stock_qty</span><span class="text-[10px] text-slate-500">INT</span></div>
+          </div>
+        </div>
+
+        <!-- Categories Schema Card -->
+        <div class="bg-dark-850 border border-dark-700 rounded-xl p-3.5 hover:border-indigo-500/50 transition">
+          <div class="flex items-center justify-between border-b border-dark-700 pb-2">
+            <span class="font-bold text-xs text-white flex items-center gap-1.5"><i class="fa-solid fa-shapes text-amber-400"></i> categories</span>
+            <span class="text-[10px] bg-dark-900 px-1.5 py-0.5 rounded text-emerald-400 font-mono font-semibold" id="count-categories">12 rows</span>
+          </div>
+          <div class="mt-2.5 space-y-1 text-[11px] font-mono text-slate-300">
+            <div class="flex justify-between items-center text-amber-300"><span class="font-bold">PK category_id</span><span class="text-[10px] text-slate-500">INT</span></div>
+            <div class="flex justify-between"><span>category_name</span><span class="text-[10px] text-slate-500">TEXT</span></div>
+            <div class="flex justify-between"><span>department</span><span class="text-[10px] text-slate-500">TEXT</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Raw Table Inspector -->
+      <div class="bg-dark-850 border border-dark-700 rounded-2xl p-4 flex flex-col flex-1">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs uppercase font-bold text-slate-300 tracking-wider flex items-center gap-2">
+            <i class="fa-solid fa-table-list text-indigo-400"></i> Table Preview: <span id="currentInspectedTableName" class="text-indigo-400 font-mono">customers</span>
+          </span>
+          <span class="text-xs text-slate-400">Showing first 25 rows</span>
+        </div>
+        <div class="overflow-x-auto rounded-xl border border-dark-700 max-h-[380px] custom-scroll bg-dark-900/60">
+          <table id="schemaDataTable" class="w-full text-left font-mono text-xs border-collapse">
+            <!-- Populated via JS -->
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- TAB 4: VISUAL JOIN MATRIX & CHEAT SHEET       -->
+    <!-- ============================================== -->
+    <section id="view-visualizer" class="tab-view hidden flex-1 flex flex-col space-y-4">
+      <div class="bg-dark-850 border border-dark-700 rounded-2xl p-5">
+        <h2 class="text-base font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-network-wired text-indigo-400"></i> Visual Join Interactive Blueprint
+        </h2>
+        <p class="text-xs text-slate-400 mt-1">
+          A definitive conceptual guide and interactive mental model for when to use each join variety in industry work.
+        </p>
+
+        <!-- 6 Visual Cards Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">
+          
+          <!-- Card 1: INNER JOIN -->
+          <div class="bg-dark-900 border border-dark-700 hover:border-indigo-500 rounded-2xl p-4 flex flex-col justify-between transition">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-indigo-400 font-mono">INNER JOIN</span>
+                <span class="text-[10px] bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/20">Intersection</span>
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                Returns only the records with matching keys in <strong>both Table A and Table B</strong>. Discards unmatched left and unmatched right records.
+              </p>
+              <div class="bg-dark-850 rounded-lg p-2.5 mt-3 font-mono text-[11px] text-slate-300 border border-dark-750">
+                <span class="text-purple-400">SELECT</span> * <span class="text-purple-400">FROM</span> A<br>
+                <span class="text-purple-400">INNER JOIN</span> B <span class="text-purple-400">ON</span> A.id = B.id;
+              </div>
+            </div>
+            <button onclick="loadAndSwitchPreset('inner')" class="mt-4 w-full py-1.5 bg-dark-800 hover:bg-indigo-600 hover:text-white text-indigo-300 border border-dark-700 rounded-xl text-xs font-medium transition">
+              Load In Playground →
+            </button>
+          </div>
+
+          <!-- Card 2: LEFT OUTER JOIN -->
+          <div class="bg-dark-900 border border-dark-700 hover:border-sky-500 rounded-2xl p-4 flex flex-col justify-between transition">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-sky-400 font-mono">LEFT JOIN</span>
+                <span class="text-[10px] bg-sky-500/10 text-sky-300 px-2 py-0.5 rounded-full border border-sky-500/20">Preserve Left</span>
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                Returns <strong>all records from Table A</strong>, and matched records from Table B. If no match exists, Table B columns will be padded with <code class="text-pink-400">NULL</code>.
+              </p>
+              <div class="bg-dark-850 rounded-lg p-2.5 mt-3 font-mono text-[11px] text-slate-300 border border-dark-750">
+                <span class="text-purple-400">SELECT</span> * <span class="text-purple-400">FROM</span> A<br>
+                <span class="text-purple-400">LEFT JOIN</span> B <span class="text-purple-400">ON</span> A.id = B.id;
+              </div>
+            </div>
+            <button onclick="loadAndSwitchPreset('left')" class="mt-4 w-full py-1.5 bg-dark-800 hover:bg-sky-600 hover:text-white text-sky-300 border border-dark-700 rounded-xl text-xs font-medium transition">
+              Load In Playground →
+            </button>
+          </div>
+
+          <!-- Card 3: LEFT ANTI-JOIN (IS NULL) -->
+          <div class="bg-dark-900 border border-dark-700 hover:border-amber-500 rounded-2xl p-4 flex flex-col justify-between transition">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-amber-400 font-mono">LEFT JOIN (IS NULL)</span>
+                <span class="text-[10px] bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/20">Anti-Join</span>
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                Finds "Orphans" or inactive entities: records in Table A that have <strong>no corresponding record</strong> in Table B (e.g. Customers who never ordered).
+              </p>
+              <div class="bg-dark-850 rounded-lg p-2.5 mt-3 font-mono text-[11px] text-slate-300 border border-dark-750">
+                <span class="text-purple-400">SELECT</span> * <span class="text-purple-400">FROM</span> A<br>
+                <span class="text-purple-400">LEFT JOIN</span> B <span class="text-purple-400">ON</span> A.id = B.id<br>
+                <span class="text-purple-400">WHERE</span> B.id <span class="text-purple-400">IS NULL</span>;
+              </div>
+            </div>
+            <button onclick="loadAndSwitchPreset('left_null')" class="mt-4 w-full py-1.5 bg-dark-800 hover:bg-amber-600 hover:text-white text-amber-300 border border-dark-700 rounded-xl text-xs font-medium transition">
+              Load In Playground →
+            </button>
+          </div>
+
+          <!-- Card 4: FULL OUTER JOIN -->
+          <div class="bg-dark-900 border border-dark-700 hover:border-emerald-500 rounded-2xl p-4 flex flex-col justify-between transition">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-emerald-400 font-mono">FULL OUTER JOIN</span>
+                <span class="text-[10px] bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/20">Union with Dups</span>
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                Returns all records when there is a match in either left or right. In SQLite, achieved by combining <code class="text-indigo-400">LEFT JOIN</code> and <code class="text-indigo-400">UNION</code>.
+              </p>
+              <div class="bg-dark-850 rounded-lg p-2.5 mt-3 font-mono text-[11px] text-slate-300 border border-dark-750">
+                <span class="text-purple-400">SELECT</span> * <span class="text-purple-400">FROM</span> A <span class="text-purple-400">LEFT JOIN</span> B<br>
+                <span class="text-purple-400">UNION</span><br>
+                <span class="text-purple-400">SELECT</span> * <span class="text-purple-400">FROM</span> B <span class="text-purple-400">LEFT JOIN</span> A;
+              </div>
+            </div>
+            <button onclick="loadAndSwitchPreset('full')" class="mt-4 w-full py-1.5 bg-dark-800 hover:bg-emerald-600 hover:text-white text-emerald-300 border border-dark-700 rounded-xl text-xs font-medium transition">
+              Load In Playground →
+            </button>
+          </div>
+
+          <!-- Card 5: CROSS JOIN -->
+          <div class="bg-dark-900 border border-dark-700 hover:border-pink-500 rounded-2xl p-4 flex flex-col justify-between transition">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-pink-400 font-mono">CROSS JOIN</span>
+                <span class="text-[10px] bg-pink-500/10 text-pink-300 px-2 py-0.5 rounded-full border border-pink-500/20">A × B</span>
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                Calculates the Cartesian Product. Every row of Table A is paired with <strong>every row of Table B</strong>. 10 rows × 10 rows = 100 rows.
+              </p>
+              <div class="bg-dark-850 rounded-lg p-2.5 mt-3 font-mono text-[11px] text-slate-300 border border-dark-750">
+                <span class="text-purple-400">SELECT</span> * <span class="text-purple-400">FROM</span> categories<br>
+                <span class="text-purple-400">CROSS JOIN</span> stores;
+              </div>
+            </div>
+            <button onclick="loadAndSwitchPreset('cross')" class="mt-4 w-full py-1.5 bg-dark-800 hover:bg-pink-600 hover:text-white text-pink-300 border border-dark-700 rounded-xl text-xs font-medium transition">
+              Load In Playground →
+            </button>
+          </div>
+
+          <!-- Card 6: SELF JOIN -->
+          <div class="bg-dark-900 border border-dark-700 hover:border-violet-500 rounded-2xl p-4 flex flex-col justify-between transition">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-violet-400 font-mono">SELF JOIN</span>
+                <span class="text-[10px] bg-violet-500/10 text-violet-300 px-2 py-0.5 rounded-full border border-violet-500/20">Unary Hierarchy</span>
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                Joining a table to itself using aliases (<code class="text-sky-300">e1</code>, <code class="text-sky-300">e2</code>). Ideal for organizational hierarchies, manager-subordinate pairs, or sequential timestamp matches.
+              </p>
+              <div class="bg-dark-850 rounded-lg p-2.5 mt-3 font-mono text-[11px] text-slate-300 border border-dark-750">
+                <span class="text-purple-400">SELECT</span> e.name, m.name <span class="text-purple-400">AS</span> manager<br>
+                <span class="text-purple-400">FROM</span> staff e<br>
+                <span class="text-purple-400">JOIN</span> staff m <span class="text-purple-400">ON</span> e.mgr_id = m.id;
+              </div>
+            </div>
+            <button onclick="loadAndSwitchPreset('self')" class="mt-4 w-full py-1.5 bg-dark-800 hover:bg-violet-600 hover:text-white text-violet-300 border border-dark-700 rounded-xl text-xs font-medium transition">
+              Load In Playground →
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Interactive JavaScript Engine and Logic -->
+  <script>
+    // --- Global State ---
+    let db = null;
+    let sqlModule = null;
+    let currentResults = { columns: [], values: [] };
+    let currentPage = 1;
+    let pageSize = 15;
+    let activeMissionIndex = 0;
+    let missionSolved = [false, false, false, false, false];
+
+    // --- Pre-packaged Guided Missions ---
+    const MISSIONS = [
+      {
+        id: 1,
+        title: "Find Total Spend for High-Value Customers",
+        level: "Inner Join + Grouping",
+        badge: "Mission 1",
+        objective: "Join the `customers` and `orders` tables to retrieve each customer's `full_name`, `city`, and the SUM of their `total_amount` as `total_spent`. Filter only for completed orders (`order_status = 'Completed'`), group by customer, and order by `total_spent` DESC.",
+        hint: "Use `INNER JOIN orders o ON c.customer_id = o.customer_id` followed by `WHERE o.order_status = 'Completed' GROUP BY c.customer_id ORDER BY total_spent DESC`.",
+        tables: ["customers", "orders"],
+        starterQuery: "SELECT c.full_name, c.city, SUM(o.total_amount) AS total_spent\nFROM customers c\n-- JOIN and FILTER HERE\n\nGROUP BY c.customer_id\nORDER BY total_spent DESC\nLIMIT 10;",
+        solutionQuery: "SELECT c.full_name, c.city, ROUND(SUM(o.total_amount), 2) AS total_spent\nFROM customers c\nINNER JOIN orders o ON c.customer_id = o.customer_id\nWHERE o.order_status = 'Completed'\nGROUP BY c.customer_id\nORDER BY total_spent DESC\nLIMIT 10;",
+        validator: (res) => {
+          return res.columns.length >= 3 && res.values.length > 0;
+        }
+      },
+      {
+        id: 2,
+        title: "Identify Inactive Customers (Zero Orders Placed)",
+        level: "Left Anti-Join",
+        badge: "Mission 2",
+        objective: "E-Commerce retention audit: Find all customers who have NEVER placed any order. Select their `customer_id`, `full_name`, and `email` using a `LEFT JOIN` where the order record is NULL.",
+        hint: "Perform a `LEFT JOIN orders o ON c.customer_id = o.customer_id` and add a filter `WHERE o.order_id IS NULL`.",
+        tables: ["customers", "orders"],
+        starterQuery: "SELECT c.customer_id, c.full_name, c.email\nFROM customers c\nLEFT JOIN orders o ON c.customer_id = o.customer_id\n-- Check for missing orders\nWHERE o.order_id IS NULL\nLIMIT 20;",
+        solutionQuery: "SELECT c.customer_id, c.full_name, c.email\nFROM customers c\nLEFT JOIN orders o ON c.customer_id = o.customer_id\nWHERE o.order_id IS NULL;",
+        validator: (res) => {
+          // In our seed generator, around 50-80 customers have 0 orders
+          return res.values.length >= 30 && res.columns.includes("customer_id");
+        }
+      },
+      {
+        id: 3,
+        title: "Multi-Table Join: Order Items with Product & Category",
+        level: "Multi-Table (3 Joins)",
+        badge: "Mission 3",
+        objective: "Generate a sales breakdown showing `order_id`, `product_name`, `category_name`, and calculated `item_total` (`order_items.quantity * order_items.unit_price`). You must join `order_items` -> `products` -> `categories`.",
+        hint: "Start FROM `order_items oi`, JOIN `products p ON oi.product_id = p.product_id`, then JOIN `categories cat ON p.category_id = cat.category_id`.",
+        tables: ["order_items", "products", "categories"],
+        starterQuery: "SELECT \n    oi.order_id,\n    p.product_name,\n    cat.category_name,\n    (oi.quantity * oi.unit_price) AS item_total\nFROM order_items oi\n-- Write your INNER JOINS here\n\nLIMIT 15;",
+        solutionQuery: "SELECT \n    oi.order_id,\n    p.product_name,\n    cat.category_name,\n    (oi.quantity * oi.unit_price) AS item_total\nFROM order_items oi\nINNER JOIN products p ON oi.product_id = p.product_id\nINNER JOIN categories cat ON p.category_id = cat.category_id\nLIMIT 15;",
+        validator: (res) => {
+          return res.values.length === 15 && res.columns.length === 4;
+        }
+      },
+      {
+        id: 4,
+        title: "Self-Join: Team Hierarchy (Employees & Mentors)",
+        level: "Self-Join (Hierarchical)",
+        badge: "Mission 4",
+        objective: "Each customer in our system has an optional senior account manager / mentor (`manager_id` referencing another `customer_id`). Use a SELF JOIN to list the customer's `full_name` as `client_name` alongside their manager's `full_name` as `mentor_name`.",
+        hint: "Use `FROM customers c` and `INNER JOIN customers m ON c.manager_id = m.customer_id`. Alias the tables as `c` and `m`.",
+        tables: ["customers (Self)"],
+        starterQuery: "SELECT \n    c.full_name AS client_name,\n    m.full_name AS mentor_name\nFROM customers c\n-- Self join here with mentor/manager\n\nLIMIT 20;",
+        solutionQuery: "SELECT \n    c.full_name AS client_name,\n    m.full_name AS mentor_name\nFROM customers c\nINNER JOIN customers m ON c.manager_id = m.customer_id\nLIMIT 20;",
+        validator: (res) => {
+          return res.values.length > 0 && res.columns.length === 2;
+        }
+      },
+      {
+        id: 5,
+        title: "Products That Have Never Been Sold",
+        level: "Inventory Left Join",
+        badge: "Mission 5",
+        objective: "Inventory audit: Find all products in our catalog (500 items) that have NEVER been ordered by any client. Retrieve the `product_name`, `price`, and `stock_qty`.",
+        hint: "Join `products p` LEFT JOIN `order_items oi ON p.product_id = oi.product_id` and filter `WHERE oi.item_id IS NULL`.",
+        tables: ["products", "order_items"],
+        starterQuery: "SELECT \n    p.product_id,\n    p.product_name,\n    p.price,\n    p.stock_qty\nFROM products p\nLEFT JOIN order_items oi ON p.product_id = oi.product_id\n-- Filter for unsellable/never sold\n\nLIMIT 20;",
+        solutionQuery: "SELECT \n    p.product_id,\n    p.product_name,\n    p.price,\n    p.stock_qty\nFROM products p\nLEFT JOIN order_items oi ON p.product_id = oi.product_id\nWHERE oi.item_id IS NULL;",
+        validator: (res) => {
+          return res.values.length > 0 && res.columns.includes("product_id");
+        }
+      }
+    ];
+
+    // --- Query Presets for Playground ---
+    const PRESETS = {
+      inner: {
+        title: "INNER JOIN: Customers with their Orders",
+        desc: "Returns only matched records. Customers who never ordered and orders without matching customer keys are excluded.",
+        formula: "A ∩ B (Only Matched)",
+        venn: { left: 0.2, right: 0.2, center: 0.85, label: "INNER JOIN" },
+        sql: `SELECT 
+    c.customer_id, 
+    c.full_name, 
+    c.city, 
+    o.order_id, 
+    o.order_date, 
+    o.order_status,
+    o.total_amount
+FROM customers c
+INNER JOIN orders o ON c.customer_id = o.customer_id
+ORDER BY o.order_id DESC
+LIMIT 15;`
+      },
+      left: {
+        title: "LEFT JOIN: All Customers + Optional Orders",
+        desc: "Includes every single customer (all 500). If a customer hasn't ordered yet, order_id and order_amount will show up as NULL.",
+        formula: "All A + (A ∩ B)",
+        venn: { left: 0.85, right: 0.2, center: 0.85, label: "LEFT JOIN" },
+        sql: `SELECT 
+    c.customer_id, 
+    c.full_name, 
+    c.email, 
+    o.order_id, 
+    o.order_date, 
+    o.total_amount
+FROM customers c
+LEFT JOIN orders o ON c.customer_id = o.customer_id
+ORDER BY o.order_id ASC
+LIMIT 20;`
+      },
+      left_null: {
+        title: "LEFT ANTI-JOIN: Inactive Customers (IS NULL)",
+        desc: "Crucial real-world marketing query. Finds customers with zero recorded orders by filtering for NULL foreign records.",
+        formula: "A - B (Difference / Orphans)",
+        venn: { left: 0.85, right: 0.05, center: 0.05, label: "LEFT (IS NULL)" },
+        sql: `SELECT 
+    c.customer_id, 
+    c.full_name, 
+    c.city, 
+    c.email
+FROM customers c
+LEFT JOIN orders o ON c.customer_id = o.customer_id
+WHERE o.order_id IS NULL
+ORDER BY c.customer_id ASC
+LIMIT 15;`
+      },
+      cross: {
+        title: "CROSS JOIN: Cartesian Product (Matrix)",
+        desc: "Pairs every row from Table A with every row from Table B. (e.g. 12 Categories × 5 Regions = 60 Matrix Slots).",
+        formula: "A × B (Cartesian)",
+        venn: { left: 0.6, right: 0.6, center: 0.6, label: "CROSS JOIN" },
+        sql: `SELECT 
+    cat.category_name, 
+    reg.region_name,
+    'Q3 Target' AS sales_campaign
+FROM categories cat
+CROSS JOIN (
+    SELECT 'North Region' AS region_name
+    UNION SELECT 'South Region'
+    UNION SELECT 'West Region'
+    UNION SELECT 'East Region'
+) reg
+LIMIT 20;`
+      },
+      self: {
+        title: "SELF JOIN: Client & Account Mentor",
+        desc: "Joining the 'customers' table to itself on manager_id to express internal relationships.",
+        formula: "Table A ⨝ Table A (Hierarchy)",
+        venn: { left: 0.65, right: 0.65, center: 0.85, label: "SELF JOIN" },
+        sql: `SELECT 
+    client.customer_id AS client_id,
+    client.full_name AS client_name,
+    client.city AS client_city,
+    manager.full_name AS mentor_account_lead,
+    manager.email AS mentor_email
+FROM customers client
+INNER JOIN customers manager ON client.manager_id = manager.customer_id
+ORDER BY client.customer_id ASC
+LIMIT 15;`
+      },
+      multi: {
+        title: "MULTI-TABLE JOIN: Full 4-Table Supply Chain",
+        desc: "Connects Customers -> Orders -> Order_Items -> Products -> Categories in a single unified analytics view.",
+        formula: "A ⨝ B ⨝ C ⨝ D",
+        venn: { left: 0.75, right: 0.75, center: 0.9, label: "MULTI-JOIN" },
+        sql: `SELECT 
+    c.full_name AS customer,
+    o.order_id,
+    p.product_name,
+    cat.category_name,
+    oi.quantity,
+    oi.unit_price,
+    (oi.quantity * oi.unit_price) AS total_line_item
+FROM customers c
+INNER JOIN orders o ON c.customer_id = o.customer_id
+INNER JOIN order_items oi ON o.order_id = oi.order_id
+INNER JOIN products p ON oi.product_id = p.product_id
+INNER JOIN categories cat ON p.category_id = cat.category_id
+ORDER BY o.order_id DESC
+LIMIT 20;`
+      },
+      full: {
+        title: "FULL OUTER JOIN Simulation in SQLite",
+        desc: "SQLite simulates Full Outer Join via LEFT JOIN and UNION with RIGHT counterpart.",
+        formula: "A ∪ B (Everything)",
+        venn: { left: 0.8, right: 0.8, center: 0.85, label: "FULL OUTER JOIN" },
+        sql: `SELECT c.customer_id, c.full_name, o.order_id, o.total_amount
+FROM customers c
+LEFT JOIN orders o ON c.customer_id = o.customer_id
+UNION
+SELECT c.customer_id, c.full_name, o.order_id, o.total_amount
+FROM orders o
+LEFT JOIN customers c ON o.customer_id = c.customer_id
+LIMIT 20;`
+      }
+    };
+
+    // --- Synthetic Realistic Data Generators (500+ records each) ---
+    function generateSyntheticData() {
+      const firstNames = ["Aarav", "Aditi", "Rahul", "Priya", "Vikram", "Sneha", "Rohan", "Ananya", "Marcus", "Elena", "Liam", "Sophia", "Wei", "Mei", "Hiroshi", "Yuki", "Carlos", "Isabella", "David", "Fatima", "Arjun", "Kavya", "Tanvi", "Siddharth", "Nisha"];
+      const lastNames = ["Sharma", "Patel", "Verma", "Rao", "Gupta", "Nair", "Kulkarni", "Deshmukh", "Smith", "Johnson", "Brown", "Miller", "Garcia", "Rodriguez", "Chen", "Wong", "Tanaka", "Sato", "Khan", "Al-Sayed", "Bose", "Mehta", "Iyer"];
+      const cities = ["Mumbai", "Bengaluru", "Delhi", "Hyderabad", "Pune", "Chennai", "Kolkata", "Ahmedabad", "New York", "London", "Tokyo", "Singapore", "Berlin", "Dubai", "Sydney", "Toronto"];
+      const countries = ["India", "USA", "UK", "Germany", "Japan", "Singapore", "Australia", "Canada", "UAE"];
+
+      const categoryList = [
+        { id: 1, name: "Smartphones & Tablets", dept: "Electronics" },
+        { id: 2, name: "Laptops & Computers", dept: "Electronics" },
+        { id: 3, name: "Audio & Headphones", dept: "Electronics" },
+        { id: 4, name: "Men's Apparel", dept: "Fashion" },
+        { id: 5, name: "Women's Apparel", dept: "Fashion" },
+        { id: 6, name: "Footwear & Sneakers", dept: "Fashion" },
+        { id: 7, name: "Home & Kitchen", dept: "Living" },
+        { id: 8, name: "Furniture & Decor", dept: "Living" },
+        { id: 9, name: "Fitness & Gym Equipment", dept: "Sports" },
+        { id: 10, name: "Books & Literature", dept: "Media" },
+        { id: 11, name: "Beauty & Personal Care", dept: "Health" },
+        { id: 12, name: "Smart Wearables", dept: "Electronics" },
+      ];
+
+      const productAdjectives = ["Pro", "Ultra", "Max", "Air", "Classic", "Wireless", "Eco", "Studio", "Hyper", "Prime", "Compact", "Ergonomic"];
+      const productNouns = ["Earbuds", "Laptop", "Backpack", "Watch", "Sneakers", "Coffee Maker", "Desk Lamp", "Yoga Mat", "Blender", "Monitor", "Keyboard", "PowerBank", "Hoodie", "Water Bottle", "Headphones"];
+
+      // 1. Generate 500 Customers
+      const customers = [];
+      for (let i = 1; i <= 500; i++) {
+        const fn = firstNames[Math.floor(Math.random() * firstNames.length)];
+        const ln = lastNames[Math.floor(Math.random() * lastNames.length)];
+        const city = cities[Math.floor(Math.random() * cities.length)];
+        const country = countries[Math.floor(Math.random() * countries.length)];
+        const email = `${fn.toLowerCase()}.${ln.toLowerCase()}${i}@example.com`;
+        // Manager ID: 15% have managers chosen from first 30 IDs
+        const managerId = (i > 30 && Math.random() < 0.65) ? Math.floor(Math.random() * 25) + 1 : null;
+        customers.push({ id: i, name: `${fn} ${ln}`, email, city, country, managerId });
+      }
+
+      // 2. Generate 500 Products
+      const products = [];
+      for (let i = 1; i <= 500; i++) {
+        const adj = productAdjectives[Math.floor(Math.random() * productAdjectives.length)];
+        const noun = productNouns[Math.floor(Math.random() * productNouns.length)];
+        const catId = categoryList[Math.floor(Math.random() * categoryList.length)].id;
+        const price = parseFloat((Math.random() * 280 + 15).toFixed(2));
+        const stock = Math.floor(Math.random() * 300) + 10;
+        products.push({ id: i, name: `${adj} ${noun} ${i}`, catId, price, stock });
+      }
+
+      // 3. Generate 550 Orders (Deliberately leaving some customers with NO orders for Anti-Join testing!)
+      // Around 420 distinct customers will make orders; the remaining ~80 will have 0 orders
+      const orders = [];
+      const orderStatuses = ["Completed", "Processing", "Shipped", "Delivered", "Cancelled"];
+      const activeCustomerPool = [];
+      for (let c = 1; c <= 420; c++) activeCustomerPool.push(c);
+
+      for (let o = 1; o <= 550; o++) {
+        const custId = activeCustomerPool[Math.floor(Math.random() * activeCustomerPool.length)];
+        // Random date in 2025/2026
+        const day = Math.floor(Math.random() * 28) + 1;
+        const month = Math.floor(Math.random() * 12) + 1;
+        const dateStr = `2025-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+        const status = orderStatuses[Math.floor(Math.random() * orderStatuses.length)];
+        const amount = parseFloat((Math.random() * 600 + 40).toFixed(2));
+        orders.push({ id: 1000 + o, custId, date: dateStr, status, amount });
+      }
+
+      // 4. Generate 1,000 Order Items (Deliberately leave ~70 products never sold for Left Anti-Join verification!)
+      const orderItems = [];
+      const soldProductPool = [];
+      for (let p = 1; p <= 430; p++) soldProductPool.push(p); // Products 431..500 are unsold orphans!
+
+      for (let item = 1; item <= 1000; item++) {
+        const orderId = orders[Math.floor(Math.random() * orders.length)].id;
+        const prodId = soldProductPool[Math.floor(Math.random() * soldProductPool.length)];
+        const qty = Math.floor(Math.random() * 4) + 1;
+        const matchingProd = products.find(p => p.id === prodId);
+        const unitPrice = matchingProd ? matchingProd.price : 49.99;
+        orderItems.push({ id: item, orderId, prodId, qty, unitPrice });
+      }
+
+      return { categories: categoryList, customers, products, orders, orderItems };
+    }
+
+    // --- Initialize WebAssembly SQLite Database ---
+    async function initDatabaseEngine() {
+      const statusText = document.getElementById('engineStatusText');
+      try {
+        statusText.innerText = "Downloading SQLite Engine...";
+        sqlModule = await initSqlJs({
+          locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+        });
+        seedDatabase();
+      } catch (err) {
+        console.error("SQL Init Error:", err);
+        statusText.innerText = "Engine Error. Check CDN.";
+        showToast("Error loading SQLite engine: " + err.message, "error");
+      }
+    }
+
+    // --- Seed SQLite Database with 500+ records ---
+    function seedDatabase(isManualReset = false) {
+      const statusText = document.getElementById('engineStatusText');
+      statusText.innerText = "Populating 2,500+ rows...";
+
+      db = new sqlModule.Database();
+      const data = generateSyntheticData();
+
+      // Begin bulk SQL transactions
+      db.run("BEGIN TRANSACTION;");
+
+      // 1. Categories
+      db.run(`CREATE TABLE categories (
+        category_id INTEGER PRIMARY KEY,
+        category_name TEXT NOT NULL,
+        department TEXT NOT NULL
+      );`);
+      const catStmt = db.prepare("INSERT INTO categories VALUES (?, ?, ?);");
+      data.categories.forEach(c => catStmt.run([c.id, c.name, c.dept]));
+      catStmt.free();
+
+      // 2. Customers (500 records)
+      db.run(`CREATE TABLE customers (
+        customer_id INTEGER PRIMARY KEY,
+        full_name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        city TEXT NOT NULL,
+        country TEXT NOT NULL,
+        manager_id INTEGER
+      );`);
+      const custStmt = db.prepare("INSERT INTO customers VALUES (?, ?, ?, ?, ?, ?);");
+      data.customers.forEach(c => custStmt.run([c.id, c.name, c.email, c.city, c.country, c.managerId]));
+      custStmt.free();
+
+      // 3. Products (500 records)
+      db.run(`CREATE TABLE products (
+        product_id INTEGER PRIMARY KEY,
+        product_name TEXT NOT NULL,
+        category_id INTEGER,
+        price REAL NOT NULL,
+        stock_qty INTEGER NOT NULL
+      );`);
+      const prodStmt = db.prepare("INSERT INTO products VALUES (?, ?, ?, ?, ?);");
+      data.products.forEach(p => prodStmt.run([p.id, p.name, p.catId, p.price, p.stock]));
+      prodStmt.free();
+
+      // 4. Orders (550 records)
+      db.run(`CREATE TABLE orders (
+        order_id INTEGER PRIMARY KEY,
+        customer_id INTEGER,
+        order_date TEXT NOT NULL,
+        order_status TEXT NOT NULL,
+        total_amount REAL NOT NULL
+      );`);
+      const ordStmt = db.prepare("INSERT INTO orders VALUES (?, ?, ?, ?, ?);");
+      data.orders.forEach(o => ordStmt.run([o.id, o.custId, o.date, o.status, o.amount]));
+      ordStmt.free();
+
+      // 5. Order Items (1000 records)
+      db.run(`CREATE TABLE order_items (
+        item_id INTEGER PRIMARY KEY,
+        order_id INTEGER,
+        product_id INTEGER,
+        quantity INTEGER NOT NULL,
+        unit_price REAL NOT NULL
+      );`);
+      const itemStmt = db.prepare("INSERT INTO order_items VALUES (?, ?, ?, ?, ?);");
+      data.orderItems.forEach(i => itemStmt.run([i.id, i.orderId, i.prodId, i.qty, i.unitPrice]));
+      itemStmt.free();
+
+      db.run("COMMIT;");
+
+      statusText.innerText = "Engine Ready (SQLite 3 WASM)";
+      
+      // Update badge counts in schema
+      updateSchemaCounts();
+      inspectTableData();
+      
+      // Execute initial playground query
+      executePlaygroundQuery();
+
+      if (isManualReset) {
+        showToast("Database recreated with fresh 2,500+ records!", "success");
+      }
+    }
+
+    function updateSchemaCounts() {
+      const tables = ["customers", "orders", "order_items", "products", "categories"];
+      tables.forEach(t => {
+        try {
+          const res = db.exec(`SELECT COUNT(*) AS cnt FROM ${t};`)[0];
+          const count = res.values[0][0];
+          const el = document.getElementById(`count-${t}`);
+          if (el) el.innerText = `${count} rows`;
+        } catch (e) {
+          console.error(e);
+        }
+      });
+    }
+
+    // --- Query Runner ---
+    function executePlaygroundQuery() {
+      const query = document.getElementById('sqlInput').value.trim();
+      const stats = document.getElementById('queryStats');
+      if (!query) {
+        showToast("Query cannot be blank", "error");
+        return;
+      }
+
+      const startTime = performance.now();
+      try {
+        const results = db.exec(query);
+        const elapsed = (performance.now() - startTime).toFixed(2);
+
+        if (results.length === 0) {
+          currentResults = { columns: [], values: [] };
+          renderResultsTable(currentResults);
+          stats.innerText = `Query executed in ${elapsed}ms (0 rows returned)`;
+          document.getElementById('resultsCountBadge').innerText = "0 Rows";
+          return;
+        }
+
+        currentResults = results[0];
+        currentPage = 1;
+        renderResultsTable(currentResults);
+        stats.innerText = `Executed in ${elapsed}ms • Total ${currentResults.values.length} rows returned`;
+        document.getElementById('resultsCountBadge').innerText = `${currentResults.values.length} Rows`;
+
+        // Update Venn visualizer dynamically based on query keywords
+        detectAndHighlightVenn(query);
+
+      } catch (err) {
+        stats.innerText = `SQL Error: ${err.message}`;
+        stats.className = "font-mono text-pink-400 font-medium text-[11px]";
+        showToast("SQL Error: " + err.message, "error");
+      }
+    }
+
+    // --- Dynamic Venn Diagram Highlighting ---
+    function detectAndHighlightVenn(query) {
+      const upper = query.toUpperCase();
+      const leftCircle = document.getElementById('vennLeft');
+      const rightCircle = document.getElementById('vennRight');
+      const centerCircle = document.getElementById('vennCenter');
+      const label = document.getElementById('vennLabel');
+
+      // Reset
+      leftCircle.setAttribute('fill', '#1e293b');
+      rightCircle.setAttribute('fill', '#1e293b');
+      centerCircle.setAttribute('fill', '#1e293b');
+
+      if (upper.includes("LEFT") && upper.includes("IS NULL")) {
+        leftCircle.setAttribute('fill', '#f59e0b');
+        centerCircle.setAttribute('fill', '#1e293b');
+        label.innerText = "LEFT ANTI-JOIN";
+      } else if (upper.includes("LEFT JOIN")) {
+        leftCircle.setAttribute('fill', '#38bdf8');
+        centerCircle.setAttribute('fill', '#6366f1');
+        label.innerText = "LEFT OUTER JOIN";
+      } else if (upper.includes("CROSS JOIN")) {
+        leftCircle.setAttribute('fill', '#ec4899');
+        rightCircle.setAttribute('fill', '#ec4899');
+        centerCircle.setAttribute('fill', '#f43f5e');
+        label.innerText = "CROSS JOIN";
+      } else if (upper.includes("UNION")) {
+        leftCircle.setAttribute('fill', '#10b981');
+        rightCircle.setAttribute('fill', '#10b981');
+        centerCircle.setAttribute('fill', '#059669');
+        label.innerText = "FULL OUTER (UNION)";
+      } else {
+        // Default Inner Join
+        centerCircle.setAttribute('fill', '#6366f1');
+        label.innerText = "INNER JOIN";
+      }
+    }
+
+    // --- Render Results Table with Pagination & NULL Highlighting ---
+    function renderResultsTable(data) {
+      const thead = document.getElementById('resultsHead');
+      const tbody = document.getElementById('resultsBody');
+
+      if (!data || !data.columns || data.columns.length === 0) {
+        thead.innerHTML = `<tr><th class="p-3 text-slate-400">Status</th></tr>`;
+        tbody.innerHTML = `<tr><td class="p-4 text-center text-slate-500 italic">Query returned no rows or command completed successfully.</td></tr>`;
+        document.getElementById('pageInfo').innerText = "0 / 0";
+        return;
+      }
+
+      // Render Header
+      let headHtml = "<tr>";
+      headHtml += `<th class="p-2.5 px-3 text-slate-500 w-12 border-r border-dark-700/60 text-center">#</th>`;
+      data.columns.forEach(col => {
+        headHtml += `<th class="p-2.5 px-3 font-semibold text-slate-200 border-r border-dark-700/50">${escapeHTML(col)}</th>`;
+      });
+      headHtml += "</tr>";
+      thead.innerHTML = headHtml;
+
+      // Pagination math
+      const totalRows = data.values.length;
+      const totalPages = Math.ceil(totalRows / pageSize) || 1;
+      if (currentPage > totalPages) currentPage = totalPages;
+
+      const startIndex = (currentPage - 1) * pageSize;
+      const endIndex = Math.min(startIndex + pageSize, totalRows);
+
+      document.getElementById('pageInfo').innerText = `${currentPage} / ${totalPages}`;
+      document.getElementById('prevPageBtn').disabled = currentPage <= 1;
+      document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
+
+      // Render Body rows
+      let bodyHtml = "";
+      for (let i = startIndex; i < endIndex; i++) {
+        const row = data.values[i];
+        bodyHtml += `<tr class="hover:bg-dark-800/80 transition-colors">`;
+        bodyHtml += `<td class="p-2 text-center text-slate-500 border-r border-dark-700/60 font-mono text-[10px]">${i + 1}</td>`;
+        
+        row.forEach(cell => {
+          if (cell === null || cell === undefined) {
+            bodyHtml += `<td class="p-2 px-3 border-r border-dark-700/50"><span class="px-1.5 py-0.5 rounded bg-pink-500/10 text-pink-400 border border-pink-500/20 text-[10px] font-bold">NULL</span></td>`;
+          } else {
+            bodyHtml += `<td class="p-2 px-3 border-r border-dark-700/50 whitespace-nowrap text-slate-300">${escapeHTML(String(cell))}</td>`;
+          }
+        });
+        bodyHtml += `</tr>`;
+      }
+      tbody.innerHTML = bodyHtml;
+    }
+
+    function changePageSize() {
+      pageSize = parseInt(document.getElementById('pageSizeSelect').value, 10);
+      currentPage = 1;
+      renderResultsTable(currentResults);
+    }
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        renderResultsTable(currentResults);
+      }
+    }
+    function nextPage() {
+      const totalPages = Math.ceil(currentResults.values.length / pageSize) || 1;
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderResultsTable(currentResults);
+      }
+    }
+
+    // --- Preset Query Loader ---
+    function loadPreset(key) {
+      const preset = PRESETS[key];
+      if (!preset) return;
+
+      document.getElementById('sqlInput').value = preset.sql;
+      document.getElementById('conceptTitle').innerText = preset.title;
+      document.getElementById('conceptDesc').innerText = preset.desc;
+      document.getElementById('conceptFormula').innerText = preset.formula;
+      
+      executePlaygroundQuery();
+    }
+
+    function loadAndSwitchPreset(key) {
+      loadPreset(key);
+      switchTab('playground');
+    }
+
+    // --- Tab Switcher Logic ---
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-view').forEach(view => view.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-indigo-600', 'text-white');
+        btn.classList.add('text-slate-400');
+      });
+
+      const targetView = document.getElementById(`view-${tabId}`);
+      const targetBtn = document.getElementById(`tabBtn-${tabId}`);
+      if (targetView) targetView.classList.remove('hidden');
+      if (targetBtn) {
+        targetBtn.classList.add('bg-indigo-600', 'text-white');
+        targetBtn.classList.remove('text-slate-400');
+      }
+
+      if (tabId === 'schema') {
+        inspectTableData();
+      }
+    }
+
+    // --- Guided Missions System ---
+    function initMissionsUI() {
+      const container = document.getElementById('missionPillsContainer');
+      container.innerHTML = "";
+
+      MISSIONS.forEach((m, idx) => {
+        const isSolved = missionSolved[idx];
+        const btn = document.createElement('button');
+        btn.className = `p-2.5 rounded-xl border text-left transition flex items-center justify-between ${
+          idx === activeMissionIndex 
+            ? 'border-indigo-500 bg-indigo-950/30 text-white' 
+            : 'border-dark-700 bg-dark-900 text-slate-400 hover:text-white'
+        }`;
+        btn.onclick = () => selectMission(idx);
+        btn.innerHTML = `
+          <div>
+            <div class="text-[10px] uppercase font-bold text-indigo-400 font-mono">${m.badge}</div>
+            <div class="text-xs font-semibold truncate max-w-[130px]">${m.title}</div>
+          </div>
+          <span class="w-5 h-5 rounded-full flex items-center justify-center text-xs ${isSolved ? 'bg-emerald-500/20 text-emerald-400' : 'bg-dark-800 text-slate-500'}">
+            <i class="fa-solid ${isSolved ? 'fa-check' : 'fa-lock-open'}"></i>
+          </span>
+        `;
+        container.appendChild(btn);
+      });
+
+      // Update current mission details
+      const current = MISSIONS[activeMissionIndex];
+      document.getElementById('missionLevelTag').innerText = `${current.badge} • ${current.level}`;
+      document.getElementById('missionTitle').innerText = current.title;
+      document.getElementById('missionObjective').innerText = current.objective;
+      document.getElementById('missionHint').innerText = current.hint;
+      document.getElementById('missionSqlInput').value = current.starterQuery;
+
+      const tablesTag = document.getElementById('missionTablesTag');
+      tablesTag.innerHTML = "";
+      current.tables.forEach(t => {
+        const tag = document.createElement('span');
+        tag.className = "px-2 py-0.5 rounded-md bg-dark-800 border border-dark-700 text-indigo-300 font-mono text-[10px]";
+        tag.innerText = t;
+        tablesTag.appendChild(tag);
+      });
+
+      // Update badge progress
+      const solvedCount = missionSolved.filter(Boolean).length;
+      document.getElementById('missionBadge').innerText = `${solvedCount}/${MISSIONS.length}`;
+      document.getElementById('missionProgressText').innerText = `${solvedCount} / ${MISSIONS.length} Completed`;
+      document.getElementById('missionProgressBar').style.width = `${(solvedCount / MISSIONS.length) * 100}%`;
+      
+      const statusTag = document.getElementById('missionStatusTag');
+      if (missionSolved[activeMissionIndex]) {
+        statusTag.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400"></i> <span class="text-emerald-400">Passed</span>`;
+      } else {
+        statusTag.innerHTML = `<i class="fa-regular fa-circle-dot text-amber-400"></i> <span class="text-amber-400">In Progress</span>`;
+      }
+    }
+
+    function selectMission(idx) {
+      activeMissionIndex = idx;
+      initMissionsUI();
+      document.getElementById('missionFeedbackTitle').innerText = "Ready to test";
+      document.getElementById('missionFeedbackDetail').innerText = "Write your SQL and press Verify Answer.";
+      document.getElementById('missionFeedbackBox').className = "p-3.5 rounded-xl border border-dark-700 bg-dark-900 text-xs flex items-start gap-3";
+    }
+
+    function toggleHint() {
+      const hint = document.getElementById('missionHint');
+      const chevron = document.getElementById('hintChevron');
+      hint.classList.toggle('hidden');
+      chevron.classList.toggle('rotate-180');
+    }
+
+    function revealSolution() {
+      const current = MISSIONS[activeMissionIndex];
+      document.getElementById('missionSqlInput').value = current.solutionQuery;
+      showToast("Solution query loaded into editor!", "info");
+    }
+
+    function resetMissionEditor() {
+      document.getElementById('missionSqlInput').value = MISSIONS[activeMissionIndex].starterQuery;
+    }
+
+    function verifyMissionSolution() {
+      const current = MISSIONS[activeMissionIndex];
+      const userSql = document.getElementById('missionSqlInput').value.trim();
+      const feedbackBox = document.getElementById('missionFeedbackBox');
+      const feedbackTitle = document.getElementById('missionFeedbackTitle');
+      const feedbackDetail = document.getElementById('missionFeedbackDetail');
+      const feedbackIcon = document.getElementById('missionFeedbackIcon');
+
+      try {
+        const results = db.exec(userSql);
+        if (!results || results.length === 0) {
+          throw new Error("Query returned 0 rows or empty result set.");
+        }
+
+        const data = results[0];
+        // Render preview table
+        renderMissionPreviewTable(data);
+
+        // Run mission-specific validator
+        const passed = current.validator(data);
+
+        if (passed) {
+          missionSolved[activeMissionIndex] = true;
+          feedbackBox.className = "p-3.5 rounded-xl border border-emerald-500/40 bg-emerald-950/20 text-xs flex items-start gap-3";
+          feedbackIcon.className = "fa-solid fa-circle-check text-emerald-400 mt-0.5 text-base";
+          feedbackTitle.innerText = "Challenge Solved Successfully!";
+          feedbackTitle.className = "font-bold text-emerald-300";
+          feedbackDetail.innerText = `Great job! Your join logic matched criteria and returned ${data.values.length} rows.`;
+          initMissionsUI();
+          showToast("Mission Complete!", "success");
+        } else {
+          feedbackBox.className = "p-3.5 rounded-xl border border-amber-500/40 bg-amber-950/20 text-xs flex items-start gap-3";
+          feedbackIcon.className = "fa-solid fa-triangle-exclamation text-amber-400 mt-0.5 text-base";
+          feedbackTitle.innerText = "Almost there, but output does not match objective";
+          feedbackTitle.className = "font-bold text-amber-300";
+          feedbackDetail.innerText = `Expected valid joined columns and conditions. Double-check your JOIN condition and filters.`;
+        }
+      } catch (err) {
+        feedbackBox.className = "p-3.5 rounded-xl border border-rose-500/40 bg-rose-950/20 text-xs flex items-start gap-3";
+        feedbackIcon.className = "fa-solid fa-circle-xmark text-rose-400 mt-0.5 text-base";
+        feedbackTitle.innerText = "Query Execution Failed";
+        feedbackTitle.className = "font-bold text-rose-300";
+        feedbackDetail.innerText = err.message;
+      }
+    }
+
+    function renderMissionPreviewTable(data) {
+      const table = document.getElementById('missionResultsTable');
+      if (!data || !data.columns) return;
+
+      let html = `<thead class="bg-dark-800 text-slate-300 border-b border-dark-700"><tr>`;
+      data.columns.forEach(col => html += `<th class="p-2 border-r border-dark-700/60">${escapeHTML(col)}</th>`);
+      html += `</tr></thead><tbody class="divide-y divide-dark-750">`;
+
+      const previewRows = data.values.slice(0, 5);
+      previewRows.forEach(row => {
+        html += `<tr>`;
+        row.forEach(cell => {
+          html += `<td class="p-2 border-r border-dark-700/60">${cell === null ? '<span class="text-pink-400 font-bold">NULL</span>' : escapeHTML(String(cell))}</td>`;
+        });
+        html += `</tr>`;
+      });
+      html += `</tbody>`;
+      table.innerHTML = html;
+    }
+
+    // --- Schema Inspector Tab ---
+    function inspectTableData() {
+      const select = document.getElementById('schemaTableSelect');
+      const tableName = select ? select.value : "customers";
+      document.getElementById('currentInspectedTableName').innerText = tableName;
+
+      try {
+        const res = db.exec(`SELECT * FROM ${tableName} LIMIT 25;`)[0];
+        const tableEl = document.getElementById('schemaDataTable');
+        if (!res) return;
+
+        let html = `<thead class="bg-dark-800 sticky top-0 text-slate-300 uppercase tracking-wider text-[11px] border-b border-dark-700"><tr>`;
+        res.columns.forEach(col => {
+          html += `<th class="p-2.5 px-3 border-r border-dark-700/60">${escapeHTML(col)}</th>`;
+        });
+        html += `</tr></thead><tbody class="divide-y divide-dark-750 text-slate-300">`;
+
+        res.values.forEach(row => {
+          html += `<tr class="hover:bg-dark-800/60">`;
+          row.forEach(cell => {
+            html += `<td class="p-2 px-3 border-r border-dark-700/50 whitespace-nowrap">${cell === null ? '<span class="text-pink-400 font-bold">NULL</span>' : escapeHTML(String(cell))}</td>`;
+          });
+          html += `</tr>`;
+        });
+        html += `</tbody>`;
+        tableEl.innerHTML = html;
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // --- Helper Utilities ---
+    function escapeHTML(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function formatSQL() {
+      // Basic formatting helper
+      const ta = document.getElementById('sqlInput');
+      let val = ta.value;
+      const keywords = ["SELECT", "FROM", "INNER JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "CROSS JOIN", "ON", "WHERE", "GROUP BY", "ORDER BY", "HAVING", "LIMIT"];
+      keywords.forEach(kw => {
+        const regex = new RegExp(`\\b${kw}\\b`, 'gi');
+        val = val.replace(regex, kw);
+      });
+      ta.value = val;
+      showToast("Keywords formatted to uppercase", "info");
+    }
+
+    function copyQuery() {
+      const ta = document.getElementById('sqlInput');
+      ta.select();
+      document.execCommand('copy');
+      showToast("SQL copied to clipboard!", "success");
+    }
+
+    function showToast(message, type = "info") {
+      const toast = document.getElementById('toast');
+      const msg = document.getElementById('toastMessage');
+      const icon = document.getElementById('toastIcon');
+
+      msg.innerText = message;
+      if (type === "error") {
+        icon.className = "fa-solid fa-triangle-exclamation text-rose-400";
+      } else if (type === "success") {
+        icon.className = "fa-solid fa-circle-check text-emerald-400";
+      } else {
+        icon.className = "fa-solid fa-circle-info text-indigo-400";
+      }
+
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 3200);
+    }
+
+    // Keyboard shortcut (Ctrl + Enter to run)
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const activeTab = document.querySelector('.tab-view:not(.hidden)');
+        if (activeTab && activeTab.id === 'view-playground') {
+          e.preventDefault();
+          executePlaygroundQuery();
+        } else if (activeTab && activeTab.id === 'view-missions') {
+          e.preventDefault();
+          verifyMissionSolution();
+        }
+      }
+    });
+
+    // Start everything on window load
+    window.onload = function() {
+      initDatabaseEngine();
+      initMissionsUI();
+    };
+  </script>
+</body>
+</html>
